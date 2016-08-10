@@ -91,16 +91,16 @@ with tf.Session() as sess:
   for i in xrange(n_steps):
     images, labels = mnist.train.next_batch(config.batch_size)
     loc_net.samping = True
-    logllratio_val, reward_val, loss_val, _ = sess.run(
-        [logllratio, reward, loss, train_op],
+    xent_val, logllratio_val, reward_val, loss_val, _ = sess.run(
+        [xent, logllratio, reward, loss, train_op],
         feed_dict={
             images_ph: images, labels_ph: labels
         }
     )
     if i and i % 20 == 0:
       logging.info(
-        'step {}: reward = {:3.4f}\tloss = {:3.4f}'.format(
-          i, reward_val, loss_val
+        'step {}: reward = {:3.4f}\tloss = {:3.4f}\txent = {:3.4f}'.format(
+          i, reward_val, loss_val, xent_val
         )
       )
 
