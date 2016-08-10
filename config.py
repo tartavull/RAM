@@ -1,7 +1,7 @@
 class Config(object):
   win_size = 8
   bandwidth = win_size ** 2
-  batch_size = 32
+  batch_size = 128
   loc_std = 0.03
   original_size = 28
   num_channels = 1
@@ -19,3 +19,4 @@ class Config(object):
   max_grad_norm = 5.
 
   step = 100000
+  eval_freq = 100

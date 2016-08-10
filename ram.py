@@ -6,6 +6,7 @@ from __future__ import print_function
 
 import logging
 import tensorflow as tf
+import numpy as np
 
 from glimpse import GlimpseNet, LocNet
 from utils import weight_variable, bias_variable, loglikelihood
@@ -89,6 +90,7 @@ with tf.Session() as sess:
   sess.run(tf.initialize_all_variables())
   for i in xrange(n_steps):
     images, labels = mnist.train.next_batch(config.batch_size)
+    loc_net.samping = True
     logllratio_val, reward_val, loss_val, _ = sess.run(
         [logllratio, reward, loss, train_op],
         feed_dict={
@@ -97,5 +99,23 @@ with tf.Session() as sess:
     )
     if i and i % 20 == 0:
       logging.info(
-          'reward = {:3.4f}\tloss={:3.4f}'.format(reward_val, loss_val)
+        'step {}: reward = {:3.4f}\tloss = {:3.4f}'.format(
+          i, reward_val, loss_val
+        )
       )
+
+    if i and i % config.eval_freq == 0:
+      steps_per_epoch = mnist.validation.num_examples // config.batch_size
+      correct_cnt = 0
+      num_samples = steps_per_epoch * config.batch_size
+      loc_net.sampling = False
+      for test_step in xrange(steps_per_epoch):
+        images, labels = mnist.validation.next_batch(config.batch_size)
+        pred_labels_val = sess.run(
+          pred_labels, feed_dict={
+            images_ph: images, labels_ph: labels
+          }
+        )
+        correct_cnt += np.sum(pred_labels_val == labels)
+      acc = correct_cnt / num_samples
+      logging.info('validation accuracy = {}'.format(acc))
