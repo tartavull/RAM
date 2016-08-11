@@ -64,7 +64,7 @@ with tf.variable_scope('baseline'):
   b_baseline = bias_variable((1,))
 baselines = []
 for t, output in enumerate(outputs[1:]):
-  baseline_t = tf.nn.sigmoid(tf.nn.xw_plus_b(output, w_baseline, b_baseline))
+  baseline_t = tf.nn.xw_plus_b(output, w_baseline, b_baseline)
   baseline_t = tf.squeeze(baseline_t)
   baselines.append(baseline_t)
 baselines = tf.pack(baselines)  # [timesteps, batch_sz]
