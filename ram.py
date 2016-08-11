@@ -88,9 +88,9 @@ grads, _ = tf.clip_by_global_norm(grads, config.max_grad_norm)
 global_step = tf.get_variable(
     'global_step', [], initializer=tf.constant_initializer(0), trainable=False)
 
-starter_learning_rate = 5e-3
+starter_learning_rate = 1e-3
 learning_rate = tf.train.exponential_decay(
-    starter_learning_rate, global_step, 200, 0.96, staircase=True)
+    starter_learning_rate, global_step, 5000, 0.5, staircase=True)
 opt = tf.train.AdamOptimizer(learning_rate)
 train_op = opt.apply_gradients(zip(grads, var_list), global_step=global_step)
 

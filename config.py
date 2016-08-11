@@ -5,9 +5,9 @@ class Config(object):
   loc_std = 0.03
   original_size = 28
   num_channels = 1
-  depth = 3
+  depth = 1
   sensor_size = win_size**2 * depth
-  minRadius = 4
+  minRadius = 8
   hg_size = hl_size = 128
   g_size = 256
   cell_output_size = 256
