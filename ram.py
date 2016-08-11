@@ -24,7 +24,6 @@ mnist = input_data.read_data_sets('MNIST_data', one_hot=False)
 config = Config()
 n_steps = config.step
 
-
 loc_mean_arr = []
 sampled_loc_arr = []
 
@@ -37,8 +36,9 @@ def get_next_input(output, i):
   return gl_next
 
 
-images_ph = tf.placeholder(
-    tf.float32, (config.batch_size, config.original_size * config.original_size * config.num_channels))
+images_ph = tf.placeholder(tf.float32,
+                           (config.batch_size, config.original_size *
+                            config.original_size * config.num_channels))
 labels_ph = tf.placeholder(tf.int64, (config.batch_size))
 
 # Build the aux nets.
@@ -80,29 +80,36 @@ reward = tf.reduce_mean(reward)
 
 var_list = tf.trainable_variables()
 # hybrid loss
-loss = -logllratio + xent   # `-` for minimize
+loss = -logllratio + xent  # `-` for minimize
 grads = tf.gradients(loss, var_list)
 grads, _ = tf.clip_by_global_norm(grads, config.max_grad_norm)
-opt = tf.train.AdamOptimizer()
-train_op = opt.apply_gradients(zip(grads, var_list))
+
+# learning rate
+global_step = tf.get_variable(
+    'global_step', [], initializer=tf.constant_initializer(0), trainable=False)
+
+starter_learning_rate = 5e-3
+learning_rate = tf.train.exponential_decay(
+    starter_learning_rate, global_step, 200, 0.96, staircase=True)
+opt = tf.train.AdamOptimizer(learning_rate)
+train_op = opt.apply_gradients(zip(grads, var_list), global_step=global_step)
 
 with tf.Session() as sess:
   sess.run(tf.initialize_all_variables())
   for i in xrange(n_steps):
     images, labels = mnist.train.next_batch(config.batch_size)
     loc_net.samping = True
-    xent_val, logllratio_val, reward_val, loss_val, _ = sess.run(
-        [xent, logllratio, reward, loss, train_op],
+    xent_val, logllratio_val, reward_val, loss_val, lr_val, _ = sess.run(
+        [xent, logllratio, reward, loss, learning_rate, train_op],
         feed_dict={
-            images_ph: images, labels_ph: labels
-        }
-    )
+            images_ph: images,
+            labels_ph: labels
+        })
     if i and i % 20 == 0:
+      logging.info('step {}: lr = {:3.6f}'.format(i, lr_val))
       logging.info(
-        'step {}: reward = {:3.4f}\tloss = {:3.4f}\txent = {:3.4f}'.format(
-          i, reward_val, loss_val, xent_val
-        )
-      )
+          'step {}: reward = {:3.4f}\tloss = {:3.4f}\txent = {:3.4f}'.format(
+              i, reward_val, loss_val, xent_val))
 
     if i and i % config.eval_freq == 0:
       steps_per_epoch = mnist.validation.num_examples // config.batch_size
@@ -111,11 +118,11 @@ with tf.Session() as sess:
       loc_net.sampling = False
       for test_step in xrange(steps_per_epoch):
         images, labels = mnist.validation.next_batch(config.batch_size)
-        pred_labels_val = sess.run(
-          pred_labels, feed_dict={
-            images_ph: images, labels_ph: labels
-          }
-        )
+        pred_labels_val = sess.run(pred_labels,
+                                   feed_dict={
+                                       images_ph: images,
+                                       labels_ph: labels
+                                   })
         correct_cnt += np.sum(pred_labels_val == labels)
       acc = correct_cnt / num_samples
       logging.info('validation accuracy = {}'.format(acc))
