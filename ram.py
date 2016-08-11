@@ -95,7 +95,7 @@ reward = tf.reduce_mean(reward)
 baselines_mse = tf.reduce_mean(tf.square((rewards - baselines)))
 var_list = tf.trainable_variables()
 # hybrid loss
-loss = -logllratio + xent + 0.01 * baselines_mse  # `-` for minimize
+loss = -logllratio + xent + baselines_mse  # `-` for minimize
 grads = tf.gradients(loss, var_list)
 grads, _ = tf.clip_by_global_norm(grads, config.max_grad_norm)
 
@@ -103,7 +103,7 @@ grads, _ = tf.clip_by_global_norm(grads, config.max_grad_norm)
 global_step = tf.get_variable(
     'global_step', [], initializer=tf.constant_initializer(0), trainable=False)
 
-starter_learning_rate = 1e-3
+starter_learning_rate = 1e-2
 learning_rate = tf.train.exponential_decay(
     starter_learning_rate, global_step, 200, 0.94, staircase=True)
 opt = tf.train.AdamOptimizer(learning_rate)
@@ -114,17 +114,18 @@ with tf.Session() as sess:
   for i in xrange(n_steps):
     images, labels = mnist.train.next_batch(config.batch_size)
     loc_net.samping = True
-    xent_val, logllratio_val, reward_val, loss_val, lr_val, _ = sess.run(
-        [xent, logllratio, reward, loss, learning_rate, train_op],
+    adv_val, baselines_mse_val, xent_val, logllratio_val, reward_val, loss_val, lr_val, _ = sess.run(
+        [advs, baselines_mse, xent, logllratio, reward, loss, learning_rate, train_op],
         feed_dict={
             images_ph: images,
             labels_ph: labels
         })
     if i and i % 20 == 0:
       logging.info('step {}: lr = {:3.6f}'.format(i, lr_val))
+      logging.info('advs = {}'.format(adv_val.mean()))
       logging.info(
-          'step {}: reward = {:3.4f}\tloss = {:3.4f}\txent = {:3.4f}'.format(
-              i, reward_val, loss_val, xent_val))
+        'step {}: reward = {:3.4f}\tloss = {:3.4f}\txent = {:3.4f}\tllratio = {:3.4f}\tbaselines_mse = {:3.4f}'.format(
+              i, reward_val, loss_val, xent_val, logllratio_val, baselines_mse_val))
     if i and i % config.eval_freq == 0:
       steps_per_epoch = mnist.validation.num_examples // config.batch_size
       correct_cnt = 0
