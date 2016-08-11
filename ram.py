@@ -57,6 +57,19 @@ inputs = [init_glimpse]
 inputs.extend([0] * (config.num_glimpses))
 outputs, _ = seq2seq.rnn_decoder(
     inputs, init_state, lstm_cell, loop_function=get_next_input)
+
+# Time independent baselines
+with tf.variable_scope('baseline'):
+  w_baseline = weight_variable((config.cell_output_size, 1))
+  b_baseline = bias_variable((1,))
+baselines = []
+for t, output in enumerate(outputs[1:]):
+  baseline_t = tf.nn.sigmoid(tf.nn.xw_plus_b(output, w_baseline, b_baseline))
+  baseline_t = tf.squeeze(baseline_t)
+  baselines.append(baseline_t)
+baselines = tf.pack(baselines)  # [timesteps, batch_sz]
+baselines = tf.transpose(baselines)  # [batch_sz, timesteps]
+
 # Take the last step only.
 output = outputs[-1]
 # Build classification network.
@@ -75,12 +88,14 @@ reward = tf.cast(tf.equal(pred_labels, labels_ph), tf.float32)
 rewards = tf.expand_dims(reward, 1)  # [batch_sz, 1]
 rewards = tf.tile(rewards, (1, config.num_glimpses))  # [batch_sz, timesteps]
 logll = loglikelihood(loc_mean_arr, sampled_loc_arr, config.loc_std)
-logllratio = tf.reduce_mean(logll * rewards)
+advs = rewards - tf.stop_gradient(baselines)
+logllratio = tf.reduce_mean(logll * advs)
 reward = tf.reduce_mean(reward)
 
+baselines_mse = tf.reduce_mean(tf.square((rewards - baselines)))
 var_list = tf.trainable_variables()
 # hybrid loss
-loss = -logllratio + xent  # `-` for minimize
+loss = -logllratio + xent + 0.01 * baselines_mse  # `-` for minimize
 grads = tf.gradients(loss, var_list)
 grads, _ = tf.clip_by_global_norm(grads, config.max_grad_norm)
 
@@ -90,7 +105,7 @@ global_step = tf.get_variable(
 
 starter_learning_rate = 1e-3
 learning_rate = tf.train.exponential_decay(
-    starter_learning_rate, global_step, 5000, 0.5, staircase=True)
+    starter_learning_rate, global_step, 200, 0.94, staircase=True)
 opt = tf.train.AdamOptimizer(learning_rate)
 train_op = opt.apply_gradients(zip(grads, var_list), global_step=global_step)
 
@@ -110,7 +125,6 @@ with tf.Session() as sess:
       logging.info(
           'step {}: reward = {:3.4f}\tloss = {:3.4f}\txent = {:3.4f}'.format(
               i, reward_val, loss_val, xent_val))
-
     if i and i % config.eval_freq == 0:
       steps_per_epoch = mnist.validation.num_examples // config.batch_size
       correct_cnt = 0
