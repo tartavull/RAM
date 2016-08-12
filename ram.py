@@ -52,8 +52,7 @@ N = tf.shape(images_ph)[0]
 init_loc = tf.random_uniform((N, 2), minval=-1, maxval=1)
 init_glimpse = gl(init_loc)
 # Core network.
-lstm_cell = rnn_cell.LSTMCell(
-    config.cell_size, config.g_size, num_proj=config.cell_out_size)
+lstm_cell = rnn_cell.LSTMCell(config.cell_size, state_is_tuple=True)
 init_state = lstm_cell.zero_state(N, tf.float32)
 inputs = [init_glimpse]
 inputs.extend([0] * (config.num_glimpses))
