@@ -109,6 +109,7 @@ starter_learning_rate = 1e-3
 learning_rate = tf.train.exponential_decay(
     starter_learning_rate, global_step, training_steps_per_epoch,
     0.97, staircase=True)
+learning_rate = tf.clip_by_value(learning_rate, 1e-4, starter_learning_rate)
 opt = tf.train.AdamOptimizer(learning_rate)
 train_op = opt.apply_gradients(zip(grads, var_list), global_step=global_step)
 
