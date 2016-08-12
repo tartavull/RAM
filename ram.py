@@ -37,9 +37,9 @@ def get_next_input(output, i):
 
 
 images_ph = tf.placeholder(tf.float32,
-                           (config.batch_size, config.original_size *
-                            config.original_size * config.num_channels))
-labels_ph = tf.placeholder(tf.int64, (config.batch_size))
+                           [None, config.original_size *
+                            config.original_size * config.num_channels])
+labels_ph = tf.placeholder(tf.int64, [None])
 
 # Build the aux nets.
 with tf.variable_scope('glimpse_net'):
@@ -47,12 +47,13 @@ with tf.variable_scope('glimpse_net'):
 with tf.variable_scope('loc_net'):
   loc_net = LocNet(config)
 
-init_loc = tf.random_uniform((config.batch_size, 2), minval=-1, maxval=1)
+N = tf.shape(images_ph)[0]
+init_loc = tf.random_uniform((N, 2), minval=-1, maxval=1)
 init_glimpse = gl(init_loc)
 # Core network.
 lstm_cell = rnn_cell.LSTMCell(
     config.cell_size, config.g_size, num_proj=config.cell_out_size)
-init_state = lstm_cell.zero_state(config.batch_size, tf.float32)
+init_state = lstm_cell.zero_state(N, tf.float32)
 inputs = [init_glimpse]
 inputs.extend([0] * (config.num_glimpses))
 outputs, _ = seq2seq.rnn_decoder(
@@ -118,6 +119,8 @@ with tf.Session() as sess:
   sess.run(tf.initialize_all_variables())
   for i in xrange(n_steps):
     images, labels = mnist.train.next_batch(config.batch_size)
+    images = np.tile(images, [config.M, 1])
+    labels = np.tile(labels, [config.M])
     loc_net.samping = True
     adv_val, baselines_mse_val, xent_val, logllratio_val, \
         reward_val, loss_val, lr_val, _ = sess.run(
