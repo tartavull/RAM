@@ -1,4 +1,4 @@
-"""Recurrent Visual Attention Model. V. Mnih et al."""
+"""Recurrent Models of Visual Attention V. Mnih et al."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -35,7 +35,7 @@ def get_next_input(output, i):
   sampled_loc_arr.append(loc)
   return gl_next
 
-
+# placeholders
 images_ph = tf.placeholder(tf.float32,
                            [None, config.original_size * config.original_size *
                             config.num_channels])
@@ -47,6 +47,7 @@ with tf.variable_scope('glimpse_net'):
 with tf.variable_scope('loc_net'):
   loc_net = LocNet(config)
 
+# number of examples
 N = tf.shape(images_ph)[0]
 init_loc = tf.random_uniform((N, 2), minval=-1, maxval=1)
 init_glimpse = gl(init_loc)
@@ -103,9 +104,8 @@ grads, _ = tf.clip_by_global_norm(grads, config.max_grad_norm)
 # learning rate
 global_step = tf.get_variable(
     'global_step', [], initializer=tf.constant_initializer(0), trainable=False)
-
 training_steps_per_epoch = mnist.train.num_examples // config.batch_size
-starter_learning_rate = 1e-3
+starter_learning_rate = config.lr_start
 # decay per training epoch
 learning_rate = tf.train.exponential_decay(
     starter_learning_rate,
@@ -113,7 +113,7 @@ learning_rate = tf.train.exponential_decay(
     training_steps_per_epoch,
     0.97,
     staircase=True)
-learning_rate = tf.clip_by_value(learning_rate, 1e-4, starter_learning_rate)
+learning_rate = tf.maximum(learning_rate, config.lr_min)
 opt = tf.train.AdamOptimizer(learning_rate)
 train_op = opt.apply_gradients(zip(grads, var_list), global_step=global_step)
 
@@ -121,6 +121,7 @@ with tf.Session() as sess:
   sess.run(tf.initialize_all_variables())
   for i in xrange(n_steps):
     images, labels = mnist.train.next_batch(config.batch_size)
+    # duplicate M times, see Eqn (2)
     images = np.tile(images, [config.M, 1])
     labels = np.tile(labels, [config.M])
     loc_net.samping = True
@@ -141,14 +142,16 @@ with tf.Session() as sess:
           logllratio_val, baselines_mse_val))
 
     if i and i % training_steps_per_epoch == 0:
+      # Evaluation
       for dataset in [mnist.validation, mnist.test]:
-        steps_per_epoch = dataset.num_examples // config.batch_size
+        steps_per_epoch = dataset.num_examples // config.eval_batch_size
         correct_cnt = 0
         num_samples = steps_per_epoch * config.batch_size
         loc_net.sampling = True
         for test_step in xrange(steps_per_epoch):
           images, labels = dataset.next_batch(config.batch_size)
           labels_bak = labels
+          # Duplicate M times
           images = np.tile(images, [config.M, 1])
           labels = np.tile(labels, [config.M])
           softmax_val = sess.run(softmax,

@@ -2,6 +2,7 @@ class Config(object):
   win_size = 8
   bandwidth = win_size**2
   batch_size = 32
+  eval_batch_size = 50
   loc_std = 0.22
   original_size = 28
   num_channels = 1
@@ -19,7 +20,8 @@ class Config(object):
   max_grad_norm = 5.
 
   step = 100000
-  eval_freq = 100
+  lr_start = 1e-3
+  lr_min = 1e-4
 
-  # MC
+  # Monte Carlo sampling
   M = 10
