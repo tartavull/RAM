@@ -20,3 +20,6 @@ class Config(object):
 
   step = 100000
   eval_freq = 100
+
+  # MC
+  M = 10

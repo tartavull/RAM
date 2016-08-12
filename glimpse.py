@@ -22,8 +22,6 @@ class GlimpseNet(object):
     self.minRadius = config.minRadius
     self.depth = config.depth
 
-    self.batch_size = config.batch_size
-
     self.hg_size = config.hg_size
     self.hl_size = config.hl_size
     self.g_size = config.g_size
@@ -47,17 +45,20 @@ class GlimpseNet(object):
   def get_glimpse(self, loc):
     """Take glimpse on the original images."""
     imgs = tf.reshape(self.images_ph, [
-                      self.batch_size, self.original_size, self.original_size, self.num_channels])
-    glimpse_imgs = tf.image.extract_glimpse(imgs, [self.win_size, self.win_size],
-                                            loc)
+        tf.shape(self.images_ph)[0], self.original_size, self.original_size,
+        self.num_channels
+    ])
+    glimpse_imgs = tf.image.extract_glimpse(imgs,
+                                            [self.win_size, self.win_size], loc)
     glimpse_imgs = tf.reshape(glimpse_imgs, [
-        self.batch_size, self.win_size * self.win_size * self.num_channels])
+        tf.shape(loc)[0], self.win_size * self.win_size * self.num_channels
+    ])
     return glimpse_imgs
 
   def __call__(self, loc):
     glimpse_input = self.get_glimpse(loc)
     glimpse_input = tf.reshape(glimpse_input,
-                               (self.batch_size, self.sensor_size))
+                               (tf.shape(loc)[0], self.sensor_size))
     g = tf.nn.relu(tf.nn.xw_plus_b(glimpse_input, self.w_g0, self.b_g0))
     g = tf.nn.xw_plus_b(g, self.w_g1, self.b_g1)
     l = tf.nn.relu(tf.nn.xw_plus_b(loc, self.w_l0, self.b_l0))
@@ -77,7 +78,6 @@ class LocNet(object):
     self.loc_dim = config.loc_dim
     self.input_dim = config.cell_output_size
     self.loc_std = config.loc_std
-    self.batch_size = config.batch_size
     self._sampling = True
 
     self.init_weights()
@@ -91,7 +91,7 @@ class LocNet(object):
     mean = tf.stop_gradient(mean)
     if self._sampling:
       loc = mean + tf.random_normal(
-          (self.batch_size, self.loc_dim), stddev=self.loc_std)
+          (tf.shape(input)[0], self.loc_dim), stddev=self.loc_std)
       loc = tf.clip_by_value(loc, -1., 1.)
     else:
       loc = mean
