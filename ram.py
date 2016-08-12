@@ -37,8 +37,8 @@ def get_next_input(output, i):
 
 
 images_ph = tf.placeholder(tf.float32,
-                           [None, config.original_size *
-                            config.original_size * config.num_channels])
+                           [None, config.original_size * config.original_size *
+                            config.num_channels])
 labels_ph = tf.placeholder(tf.int64, [None])
 
 # Build the aux nets.
@@ -108,12 +108,14 @@ training_steps_per_epoch = mnist.train.num_examples // config.batch_size
 starter_learning_rate = 1e-3
 # decay per training epoch
 learning_rate = tf.train.exponential_decay(
-    starter_learning_rate, global_step, training_steps_per_epoch,
-    0.97, staircase=True)
+    starter_learning_rate,
+    global_step,
+    training_steps_per_epoch,
+    0.97,
+    staircase=True)
 learning_rate = tf.clip_by_value(learning_rate, 1e-4, starter_learning_rate)
 opt = tf.train.AdamOptimizer(learning_rate)
 train_op = opt.apply_gradients(zip(grads, var_list), global_step=global_step)
-
 
 with tf.Session() as sess:
   sess.run(tf.initialize_all_variables())
