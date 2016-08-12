@@ -87,13 +87,15 @@ class LocNet(object):
     self.b = bias_variable((self.loc_dim,))
 
   def __call__(self, input):
-    mean = tf.nn.tanh(tf.nn.xw_plus_b(input, self.w, self.b))
+    mean = tf.clip_by_value(tf.nn.xw_plus_b(input, self.w, self.b), -1., 1.)
+    mean = tf.stop_gradient(mean)
     if self._sampling:
       loc = mean + tf.random_normal(
           (self.batch_size, self.loc_dim), stddev=self.loc_std)
-      loc = tf.nn.tanh(loc)
+      loc = tf.clip_by_value(loc, -1., 1.)
     else:
       loc = mean
+    loc = tf.stop_gradient(loc)
     return loc, mean
 
   @property
