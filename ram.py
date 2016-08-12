@@ -103,29 +103,38 @@ grads, _ = tf.clip_by_global_norm(grads, config.max_grad_norm)
 global_step = tf.get_variable(
     'global_step', [], initializer=tf.constant_initializer(0), trainable=False)
 
-starter_learning_rate = 1e-2
+training_steps_per_epoch = mnist.train.num_examples // config.batch_size
+starter_learning_rate = 1e-3
+# decay per training epoch
 learning_rate = tf.train.exponential_decay(
-    starter_learning_rate, global_step, 200, 0.94, staircase=True)
+    starter_learning_rate, global_step, training_steps_per_epoch,
+    0.97, staircase=True)
 opt = tf.train.AdamOptimizer(learning_rate)
 train_op = opt.apply_gradients(zip(grads, var_list), global_step=global_step)
+
 
 with tf.Session() as sess:
   sess.run(tf.initialize_all_variables())
   for i in xrange(n_steps):
     images, labels = mnist.train.next_batch(config.batch_size)
     loc_net.samping = True
-    adv_val, baselines_mse_val, xent_val, logllratio_val, reward_val, loss_val, lr_val, _ = sess.run(
-        [advs, baselines_mse, xent, logllratio, reward, loss, learning_rate, train_op],
-        feed_dict={
-            images_ph: images,
-            labels_ph: labels
-        })
+    adv_val, baselines_mse_val, xent_val, logllratio_val, \
+        reward_val, loss_val, lr_val, _ = sess.run(
+            [advs, baselines_mse, xent, logllratio,
+             reward, loss, learning_rate, train_op],
+            feed_dict={
+                images_ph: images,
+                labels_ph: labels
+            })
     if i and i % 20 == 0:
       logging.info('step {}: lr = {:3.6f}'.format(i, lr_val))
-      logging.info('advs = {}'.format(adv_val.mean()))
+      logging.info('step {}: advs = {}'.format(i, adv_val.mean()))
       logging.info(
-        'step {}: reward = {:3.4f}\tloss = {:3.4f}\txent = {:3.4f}\tllratio = {:3.4f}\tbaselines_mse = {:3.4f}'.format(
-              i, reward_val, loss_val, xent_val, logllratio_val, baselines_mse_val))
+          'step {}: reward = {:3.4f}\tloss = {:3.4f}\txent = {:3.4f}'.format(
+              i, reward_val, loss_val, xent_val))
+      logging.info('llratio = {:3.4f}\tbaselines_mse = {:3.4f}'.format(
+          logllratio_val, baselines_mse_val))
+
     if i and i % config.eval_freq == 0:
       steps_per_epoch = mnist.validation.num_examples // config.batch_size
       correct_cnt = 0
