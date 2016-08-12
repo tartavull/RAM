@@ -147,7 +147,7 @@ with tf.Session() as sess:
         num_samples = steps_per_epoch * config.batch_size
         loc_net.sampling = True
         for test_step in xrange(steps_per_epoch):
-          images, labels = mnist.validation.next_batch(config.batch_size)
+          images, labels = dataset.next_batch(config.batch_size)
           labels_bak = labels
           images = np.tile(images, [config.M, 1])
           labels = np.tile(labels, [config.M])
