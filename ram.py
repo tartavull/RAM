@@ -78,11 +78,11 @@ with tf.variable_scope('cls'):
   w_logit = weight_variable((config.cell_output_size, config.num_classes))
   b_logit = bias_variable((config.num_classes,))
 logits = tf.nn.xw_plus_b(output, w_logit, b_logit)
+softmax = tf.nn.softmax(logits)
 
 # cross-entropy.
 xent = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, labels_ph)
 xent = tf.reduce_mean(xent)
-
 pred_labels = tf.argmax(logits, 1)
 # 0/1 reward.
 reward = tf.cast(tf.equal(pred_labels, labels_ph), tf.float32)
@@ -148,11 +148,19 @@ with tf.Session() as sess:
       loc_net.sampling = False
       for test_step in xrange(steps_per_epoch):
         images, labels = mnist.validation.next_batch(config.batch_size)
-        pred_labels_val = sess.run(pred_labels,
-                                   feed_dict={
-                                       images_ph: images,
-                                       labels_ph: labels
-                                   })
-        correct_cnt += np.sum(pred_labels_val == labels)
+        labels_bak = labels
+        images = np.tile(images, [config.M, 1])
+        labels = np.tile(labels, [config.M])
+        softmax_val = sess.run(softmax,
+                               feed_dict={
+                                   images_ph: images,
+                                   labels_ph: labels
+                               })
+        softmax_val = np.reshape(softmax_val,
+                                 [config.M, -1, config.num_classes])
+        softmax_val = np.mean(softmax_val, 0)
+        pred_labels_val = np.argmax(softmax_val, 1)
+        pred_labels_val = pred_labels_val.flatten()
+        correct_cnt += np.sum(pred_labels_val == labels_bak)
       acc = correct_cnt / num_samples
       logging.info('validation accuracy = {}'.format(acc))
