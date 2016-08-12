@@ -132,35 +132,38 @@ with tf.Session() as sess:
                 images_ph: images,
                 labels_ph: labels
             })
-    if i and i % 20 == 0:
+    if i and i % 100 == 0:
       logging.info('step {}: lr = {:3.6f}'.format(i, lr_val))
-      logging.info('step {}: advs = {}'.format(i, adv_val.mean()))
       logging.info(
           'step {}: reward = {:3.4f}\tloss = {:3.4f}\txent = {:3.4f}'.format(
               i, reward_val, loss_val, xent_val))
       logging.info('llratio = {:3.4f}\tbaselines_mse = {:3.4f}'.format(
           logllratio_val, baselines_mse_val))
 
-    if i and i % config.eval_freq == 0:
-      steps_per_epoch = mnist.validation.num_examples // config.batch_size
-      correct_cnt = 0
-      num_samples = steps_per_epoch * config.batch_size
-      loc_net.sampling = False
-      for test_step in xrange(steps_per_epoch):
-        images, labels = mnist.validation.next_batch(config.batch_size)
-        labels_bak = labels
-        images = np.tile(images, [config.M, 1])
-        labels = np.tile(labels, [config.M])
-        softmax_val = sess.run(softmax,
-                               feed_dict={
-                                   images_ph: images,
-                                   labels_ph: labels
-                               })
-        softmax_val = np.reshape(softmax_val,
-                                 [config.M, -1, config.num_classes])
-        softmax_val = np.mean(softmax_val, 0)
-        pred_labels_val = np.argmax(softmax_val, 1)
-        pred_labels_val = pred_labels_val.flatten()
-        correct_cnt += np.sum(pred_labels_val == labels_bak)
-      acc = correct_cnt / num_samples
-      logging.info('validation accuracy = {}'.format(acc))
+    if i and i % training_steps_per_epoch == 0:
+      for dataset in [mnist.validation, mnist.test]:
+        steps_per_epoch = dataset.num_examples // config.batch_size
+        correct_cnt = 0
+        num_samples = steps_per_epoch * config.batch_size
+        loc_net.sampling = True
+        for test_step in xrange(steps_per_epoch):
+          images, labels = mnist.validation.next_batch(config.batch_size)
+          labels_bak = labels
+          images = np.tile(images, [config.M, 1])
+          labels = np.tile(labels, [config.M])
+          softmax_val = sess.run(softmax,
+                                 feed_dict={
+                                     images_ph: images,
+                                     labels_ph: labels
+                                 })
+          softmax_val = np.reshape(softmax_val,
+                                   [config.M, -1, config.num_classes])
+          softmax_val = np.mean(softmax_val, 0)
+          pred_labels_val = np.argmax(softmax_val, 1)
+          pred_labels_val = pred_labels_val.flatten()
+          correct_cnt += np.sum(pred_labels_val == labels_bak)
+        acc = correct_cnt / num_samples
+        if dataset == mnist.validation:
+          logging.info('valid accuracy = {}'.format(acc))
+        else:
+          logging.info('test accuracy = {}'.format(acc))
