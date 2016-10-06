@@ -1,5 +1,5 @@
 class Config(object):
-  win_size = 8
+  win_size = 5
   bandwidth = win_size**2
   batch_size = 32
   eval_batch_size = 50
@@ -11,11 +11,10 @@ class Config(object):
   minRadius = 8
   hg_size = hl_size = 128
   g_size = 256
-  cell_output_size = 256
   loc_dim = 2
-  cell_size = 256
+  cell_size = g_size
   cell_out_size = cell_size
-  num_glimpses = 6
+  num_glimpses = 5
   num_classes = 10
   max_grad_norm = 5.
 

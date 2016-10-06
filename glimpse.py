@@ -11,7 +11,18 @@ class GlimpseNet(object):
   """Glimpse network.
 
   Take glimpse location input and output features for RNN.
+  
+  Given the location `loc` and input image `image_ph`, 
+  uses the glimpse sensor to extract retina representation.
 
+  The retina representation and glimpse location is then mapped into a hidden
+  space using independent linear layers parameterized by g0,g1 and l0,l1 respectively
+  using rectified units followed by another linear layer to combine the information 
+  from both components.
+
+  The external input to the recurrent neural network is the glimpse feature vector
+  At each step, the agent performs two actions: it decides how to deploy its sensor via the
+  sensor control lt, and an environment action at which might affect the state of the environment.
   """
 
   def __init__(self, config, images_ph):
@@ -22,7 +33,8 @@ class GlimpseNet(object):
 
     self.images_ph = images_ph
     self.init_weights(config)
-
+    self.extractions = []
+    self.extraction_locs = []
   def init_weights(self, config):
     """ Initialize all the trainable weights."""
     self.w_g0 = weight_variable((config.sensor_size, config.hg_size))
@@ -43,9 +55,12 @@ class GlimpseNet(object):
         tf.shape(self.images_ph)[0], self.original_size, self.original_size,
         self.num_channels
     ])
-    glimpse_imgs = tf.image.extract_glimpse(imgs,
-                                            [self.win_size, self.win_size], loc)
-    glimpse_imgs = tf.reshape(glimpse_imgs, [
+
+    extracted = tf.image.extract_glimpse(imgs,
+                                         [self.win_size, self.win_size], loc)
+    self.extractions.append(extracted)
+    self.extraction_locs.append(loc)
+    glimpse_imgs = tf.reshape(extracted, [
         tf.shape(loc)[0], self.win_size * self.win_size * self.num_channels
     ])
     return glimpse_imgs
@@ -70,15 +85,14 @@ class LocNet(object):
   """
   def __init__(self, config):
     self.loc_dim = config.loc_dim
-    self.input_dim = config.cell_output_size
     self.loc_std = config.loc_std
     self._sampling = True
 
-    self.init_weights()
+    self.init_weights(config)
 
-  def init_weights(self):
-    self.w = weight_variable((self.input_dim, self.loc_dim))
-    self.b = bias_variable((self.loc_dim,))
+  def init_weights(self, config):
+    self.w = weight_variable((config.cell_out_size,  config.loc_dim))
+    self.b = bias_variable((config.loc_dim,))
 
   def __call__(self, input):
     mean = tf.clip_by_value(tf.nn.xw_plus_b(input, self.w, self.b), -1., 1.)
@@ -107,6 +121,7 @@ class CoreNet(object):
   def __init__(self, config, mnist):
     self.loc_mean_arr = []
     self.sampled_loc_arr = []
+    self.next_inputs = []
     self.create_placeholders(config)
     self.create_auxiliary_networks(config)
 
@@ -125,8 +140,9 @@ class CoreNet(object):
 
 
     # Time independent baselines
+    # we want to reward only if larger than the expected reward
     with tf.variable_scope('baseline'):
-      w_baseline = weight_variable((config.cell_output_size, 1))
+      w_baseline = weight_variable((config.cell_out_size, 1))
       b_baseline = bias_variable((1,))
     baselines = []
     for t, output in enumerate(outputs[1:]):
@@ -140,7 +156,7 @@ class CoreNet(object):
     output = outputs[-1]
     # Build classification network.
     with tf.variable_scope('cls'):
-      w_logit = weight_variable((config.cell_output_size, config.num_classes))
+      w_logit = weight_variable((config.cell_out_size, config.num_classes))
       b_logit = bias_variable((config.num_classes,))
     logits = tf.nn.xw_plus_b(output, w_logit, b_logit)
     self.softmax = tf.nn.softmax(logits)
@@ -170,6 +186,7 @@ class CoreNet(object):
   def get_next_input(self, output, i):
     loc, loc_mean = self.loc_net(output)
     gl_next = self.gl(loc)
+    self.next_inputs.append(gl_next)
     self.loc_mean_arr.append(loc_mean)
     self.sampled_loc_arr.append(loc)
     return gl_next
