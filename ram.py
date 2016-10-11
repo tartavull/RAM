@@ -56,34 +56,24 @@ logging.getLogger().setLevel(logging.INFO)
 mnist = input_data.read_data_sets('MNIST_data', one_hot=False)
 
 config = Config()
-n_steps = config.step
-cn = CoreNet(config, mnist)
-
-# learning rate
 global_step = tf.get_variable(
     'global_step', [], initializer=tf.constant_initializer(0), trainable=False)
+
+# learning rate
 training_steps_per_epoch = mnist.train.num_examples // config.batch_size
-starter_learning_rate = config.lr_start
-# decay per training epoch
-learning_rate = tf.train.exponential_decay(
-    starter_learning_rate,
-    global_step,
-    training_steps_per_epoch,
-    0.97,
-    staircase=True)
-learning_rate = tf.maximum(learning_rate, config.lr_min)
-opt = tf.train.AdamOptimizer(learning_rate)
-train_op = opt.apply_gradients(zip(cn.grads, cn.var_list), global_step=global_step)
+cn = CoreNet(config, global_step, training_steps_per_epoch)
+
 
 
 all_summaries = []
 all_summaries.extend([tf.scalar_summary(tag,var) for tag,var in [
-  ('learning_rate', learning_rate),
+  ('learning_rate', cn.learning_rate),
   ('baselines_mse',cn.baselines_mse),
   ('xent',cn.xent),
   ('logllratio',cn.logllratio),
-  ('reward',cn.reward),
+  ('reward',cn.summary_rewards),
   ('loss',cn.loss),
+  ('glimpse_error', cn.summary_glimpse_error)
   ]])
 
 # print (cn.gl.extractions._shape_as_list)
@@ -92,39 +82,48 @@ all_summaries.extend([tf.scalar_summary(tag,var) for tag,var in [
 summary_op = tf.merge_summary(all_summaries)
 
 
+#Just for tensorboard logging
 squares_ph = tf.placeholder(tf.float32,
                             [1,config.original_size+2,
-                             config.original_size*config.num_glimpses+config.num_glimpses+1,3])
+                             (config.original_size+1)*(config.num_glimpses+1)+1,3])
 
 
 glimpses_ph = tf.placeholder(tf.float32,
                             [1,config.win_size+2,
-                            config.num_glimpses*(config.win_size+1)+1,3])
+                            (config.num_glimpses+1)*(config.win_size+1)+1,3])
 
-glimpse_op = tf.merge_summary([tf.image_summary('gls',squares_ph, max_images=1),
-                               tf.image_summary('gls2',glimpses_ph, max_images=1)])
+outputs_ph = tf.placeholder(tf.float32,
+                            [1,config.win_size+2,
+                            (config.num_glimpses+1)*(config.win_size+1)+1,3])
 
-
+glimpse_op = tf.merge_summary([tf.image_summary('squares',squares_ph, max_images=1),
+                               tf.image_summary('glimpses',glimpses_ph, max_images=1),
+                               tf.image_summary('output',outputs_ph, max_images=1)])
 
 with tf.Session() as sess:
   summary_writer = tf.train.SummaryWriter(
                './log', graph=sess.graph)
   sess.run(tf.initialize_all_variables())
-  for i in tqdm(xrange(n_steps)):
+  for i in tqdm(xrange(config.step)):
     images, labels = mnist.train.next_batch(config.batch_size)
-    # duplicate M times, see Eqn (2)
-    images = np.tile(images, [config.M, 1])
-    labels = np.tile(labels, [config.M])
     cn.loc_net.samping = True
-    sess.run(train_op,
+    sess.run(cn.train_op,
             feed_dict={
                 cn.images_ph: images,
                 cn.labels_ph: labels
             })
-    if i and i % 10 == 0:
-      loc, extractions, summary = sess.run(
-        [tf.slice(cn.gl.extraction_locs,[0,0,0],[config.num_glimpses,1,2]),
-         tf.slice(cn.gl.extractions,[0,0,0,0,0],[config.num_glimpses,1,config.win_size,config.win_size,1]),
+
+    if i and i % 50 == 0:
+      loc, extractions, outputs, summary = sess.run(
+        [tf.slice(cn.gl.summary_extraction_locs,
+                  [0,0,0],
+                  [config.num_glimpses+1,1,2]),
+         tf.slice(cn.gl.extractions,
+                  [0,0,0,0,0],
+                  [config.num_glimpses+1,1,config.win_size,config.win_size,1]),
+         tf.squeeze(tf.slice(cn.summary_image_output,
+                  [0,0,0,0,0],
+                  [config.num_glimpses+1,1,config.win_size,config.win_size,1])),
          summary_op],
               feed_dict={
                   cn.images_ph: images,
@@ -133,41 +132,12 @@ with tf.Session() as sess:
       summary_writer.add_summary(summary, i)
 
 
-      squares, glimpses = create_gimple_summary(loc, extractions, images, config)
+      squares, glimpses, outputs = create_gimple_summary(loc, extractions, outputs, images, config)
       glimpse_summary = sess.run(glimpse_op,
         feed_dict={
           squares_ph: squares,
-          glimpses_ph: glimpses}
+          glimpses_ph: glimpses,
+          outputs_ph: outputs}
         )
       summary_writer.add_summary(glimpse_summary, i)
       summary_writer.flush()
-              
-    if i and i % training_steps_per_epoch == 0:
-      # Evaluation
-      for dataset in [mnist.validation, mnist.test]:
-        steps_per_epoch = dataset.num_examples // config.eval_batch_size
-        correct_cnt = 0
-        num_samples = steps_per_epoch * config.batch_size
-        cn.loc_net.sampling = True
-        for test_step in xrange(steps_per_epoch):
-          images, labels = dataset.next_batch(config.batch_size)
-          labels_bak = labels
-          # Duplicate M times
-          images = np.tile(images, [config.M, 1])
-          labels = np.tile(labels, [config.M])
-          softmax_val = sess.run(cn.softmax,
-                                 feed_dict={
-                                     cn.images_ph: images,
-                                     cn.labels_ph: labels
-                                 })
-          softmax_val = np.reshape(softmax_val,
-                                   [config.M, -1, config.num_classes])
-          softmax_val = np.mean(softmax_val, 0)
-          pred_labels_val = np.argmax(softmax_val, 1)
-          pred_labels_val = pred_labels_val.flatten()
-          correct_cnt += np.sum(pred_labels_val == labels_bak)
-        acc = correct_cnt / num_samples
-        if dataset == mnist.validation:
-          logging.info('valid accuracy = {}'.format(acc))
-        else:
-          logging.info('test accuracy = {}'.format(acc))
