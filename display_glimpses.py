@@ -59,18 +59,18 @@ def draw_square_in_image(img, original_size, seq, top_left, top_right, bottom_ri
     img[top_right[1]:bottom_right[1], bottom_right[0]+x_offset,1] = 255
     return img
 
-def create_gimple_summary(loc, extractions, images, config):
+def create_gimple_summary(loc, extractions, output_images, images,  config):
 
     squares = create_sequence_of_images_with_borders(config.original_size,
                                                  config.original_size,
-                                                 config.num_glimpses)
+                                                 config.num_glimpses+1)
 
     background = images[0].reshape(config.original_size, config.original_size)*255.0
     background = background.astype(np.uint8)
-    squares = add_background_img(config.num_glimpses, squares, background)
+    squares = add_background_img(config.num_glimpses+1, squares, background)
     loc = glimpse_location_mapping(loc, config.original_size, config.win_size)
 
-    for i in xrange(config.num_glimpses):
+    for i in xrange(0, config.num_glimpses+1):
         top_left, top_right, bottom_right, bottom_left = get_square_corners(
             loc[i,0,:], config.original_size, config.win_size)
         squares = draw_square_in_image(
@@ -81,8 +81,8 @@ def create_gimple_summary(loc, extractions, images, config):
 
     glimpses = create_sequence_of_images_with_borders(config.win_size,
                                                       config.win_size,
-                                                      config.num_glimpses)
-    for i in xrange(config.num_glimpses):
+                                                      config.num_glimpses+1)
+    for i in xrange(0, config.num_glimpses+1):
         x_offset = 1 + i * (config.win_size+1)
         image = extractions[i] * 255.0
         image = image.astype(np.uint8)
@@ -91,4 +91,17 @@ def create_gimple_summary(loc, extractions, images, config):
         glimpses[1:-1,x_offset:config.win_size+x_offset,2] = image[0,:,:,0]
     glimpses = np.expand_dims(glimpses,0)
 
-    return squares , glimpses
+    #outputs
+    outputs = create_sequence_of_images_with_borders(config.win_size,
+                                                      config.win_size,
+                                                      config.num_glimpses+1)
+    for i in xrange(0, config.num_glimpses+1):
+        x_offset = 1 + i * (config.win_size+1)
+        output_image = output_images[i] * 255.0
+        output_image = output_image.astype(np.uint8)
+        outputs[1:-1,x_offset:config.win_size+x_offset,0] = output_image
+        outputs[1:-1,x_offset:config.win_size+x_offset,1] = output_image
+        outputs[1:-1,x_offset:config.win_size+x_offset,2] = output_image
+    outputs = np.expand_dims(outputs,0)
+
+    return squares , glimpses, outputs
